@@ -169,7 +169,9 @@ var Services = (function () {
 
     function jobMapping(url, data) {
       var basicColor = (data.color || '').replace(buildingRegExp, '');
-      var lastBuild = data.lastCompletedBuild || {};
+      var lastCompletedBuild = data.lastCompletedBuild || {};
+      var lastBuild = data.lastBuild || {};
+      var lastChange = lastBuild.changeSet ? lastBuild.changeSet.items[0] || {} : {};
       return {
         name: data.displayName || data.name || data.nodeName || 'All jobs',
         url: decodeURI(data.url || url),
@@ -177,8 +179,10 @@ var Services = (function () {
         status: status[basicColor] || basicColor,
         statusClass: colorToClass[basicColor] || '',
         statusIcon: colorToIcon[basicColor] || 'grey',
-        lastBuildNumber: lastBuild.number || '',
+        lastBuildNumber: lastCompletedBuild.number || '',
         lastBuildTime: '',
+        lastBuildChange: lastChange.msg ?? '',
+        lastBuildAuthor: lastChange.authorEmail ?? '',
         jobs: data.jobs && data.jobs.reduce(function (jobs, data) {
           var job = jobMapping(null, data);
           jobs[subJobKey(job.url)] = job;
@@ -194,7 +198,8 @@ var Services = (function () {
     return function (url) {
       url = url.charAt(url.length - 1) === '/' ? url : url + '/';
 
-      return fetch(url + 'api/json/', fetchOptions).then(function (res) {
+      var search = '?tree=' + encodeURIComponent('jobs[name,url,color,lastCompletedBuild[number],lastBuild[id,building,estimatedDuration,fullDisplayName,result,duration,changeSet[items[msg,authorEmail]{0,1}]]]')
+      return fetch(url + 'api/json/' + search, fetchOptions).then(function (res) {
         return res.ok ? res.json() : Promise.reject(res);
       }).then(function (data) {
         var job = jobMapping(url, data);
@@ -269,10 +274,11 @@ var Services = (function () {
       }
 
       var buildUrl = newValue.url + newValue.lastBuildNumber;
+      var message = newValue.lastBuildChange ? newValue.lastBuildChange + "\n" + newValue.lastBuildAuthor : '(no changes)';
       Notification.create(null, {
           type: 'basic',
           title: title + ' - ' + newValue.name,
-          message: buildUrl,
+          message: message,
           iconUrl: 'img/logo-' + newValue.statusIcon + '.svg'
         },
         {
